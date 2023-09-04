@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::{thread, time};
+
 use super::*;
 
 use anyhow::Result;
@@ -7,23 +9,28 @@ use bincode::serialize;
 use chrono::prelude::*;
 use sha256;
 
-#[derive(Debug)]
+const TARGET_HEXS: usize = 4;
+
+#[derive(Debug, Clone)]
 pub struct Block {
     timestamp: u128,
     data: String,
     prev_block_hash: String,
     hash: String,
+    nonce: i32,
 }
 
 impl Block {
     pub fn new_block(data: String, prev_block_hash: String) -> Result<Block> {
+        let timestamp = Utc::now().timestamp_millis() as u128;
         let mut block = Block {
-            timestamp: 0,
+            timestamp,
             data,
             prev_block_hash,
             hash: String::new(),
+            nonce: 0,
         };
-        block.set_hash()?;
+        block.proof_of_work()?;
         Ok(block)
     }
 
@@ -31,13 +38,38 @@ impl Block {
         Block::new_block(String::from("Genesis Block"), String::new()).unwrap()
     }
 
-    pub fn set_hash(&mut self) -> Result<()> {
-        self.timestamp = Utc::now().timestamp_millis() as u128;
-        let content = (self.data.clone(), self.timestamp);
-        let bytes = serialize(&content)?;
-        let hash = sha256::digest(&bytes[..]);
+    pub fn proof_of_work(&mut self) -> Result<()> {
+        println!("Mining the block containing \"{}\"\n", self.data);
+
+        while !self.validate()? {
+            self.nonce += 1;
+        }
+
+        let data = self.prepare_hash_data()?;
+        let hash = sha256::digest(data);
         self.hash = hash;
+
         Ok(())
+    }
+
+    pub fn prepare_hash_data(&self) -> Result<Vec<u8>> {
+        let content = (
+            self.prev_block_hash.clone(),
+            self.data.clone(),
+            self.timestamp,
+            TARGET_HEXS,
+            self.nonce,
+        );
+        let data = serialize(&content)?;
+        Ok(data)
+    }
+
+    pub fn validate(&self) -> Result<bool> {
+        let data = self.prepare_hash_data()?;
+        let mut vec: Vec<u8> = Vec::new();
+        vec.resize(TARGET_HEXS, '0' as u8);
+
+        Ok(&sha256::digest(data)[..TARGET_HEXS] == String::from_utf8(vec)?)
     }
 
     // --------- getter ---------

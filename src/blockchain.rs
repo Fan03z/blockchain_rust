@@ -5,7 +5,7 @@ use anyhow::Result;
 use super::*;
 use crate::block::Block;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Blockchain {
     blocks: Vec<Block>,
 }
