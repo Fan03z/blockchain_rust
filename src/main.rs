@@ -2,18 +2,20 @@
 
 mod block;
 mod blockchain;
+mod cli;
+
+extern crate env_logger;
 
 use anyhow::Result;
+use log::info;
 
 use crate::blockchain::Blockchain;
 
 fn main() -> Result<()> {
-    let mut blockchain = Blockchain::new();
+    env_logger::init();
 
-    blockchain.add_block(String::from("Send 1 BTC to Ivan"))?;
-    blockchain.add_block(String::from("Send 2 more BTC to Ivan"))?;
-
-    println!("Blockchain: {:#?}", blockchain);
+    let mut cli = cli::Cli::new()?;
+    cli.run()?;
 
     Ok(())
 }

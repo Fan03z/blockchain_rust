@@ -1,17 +1,15 @@
 #![allow(unused)]
 
-use std::{thread, time};
-
 use super::*;
 
-use anyhow::Result;
 use bincode::serialize;
 use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
 use sha256;
 
 const TARGET_HEXS: usize = 4;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Block {
     timestamp: u128,
     data: String,
@@ -39,7 +37,7 @@ impl Block {
     }
 
     pub fn proof_of_work(&mut self) -> Result<()> {
-        println!("Mining the block containing \"{}\"\n", self.data);
+        info!("Mining the block containing \"{}\"\n", self.data);
 
         while !self.validate()? {
             self.nonce += 1;
@@ -76,5 +74,9 @@ impl Block {
 
     pub fn get_hash(&self) -> String {
         self.hash.clone()
+    }
+
+    pub fn get_prev_hash(&self) -> String {
+        self.prev_block_hash.clone()
     }
 }
