@@ -3,19 +3,22 @@
 mod block;
 mod blockchain;
 mod cli;
+mod transaction;
 
 extern crate env_logger;
 
 use anyhow::Result;
-use log::info;
+use log::{debug, error, info};
 
 use crate::blockchain::Blockchain;
 
 fn main() -> Result<()> {
     env_logger::init();
 
-    let mut cli = cli::Cli::new()?;
-    cli.run()?;
+    let mut cli = cli::Cli::new();
+    if let Err(e) = cli.run() {
+        println!("Error: {}", e);
+    };
 
     Ok(())
 }
