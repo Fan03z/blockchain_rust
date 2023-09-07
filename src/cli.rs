@@ -1,10 +1,12 @@
 #![allow(unused)]
 
 use anyhow::format_err;
+use bitcoincash_addr::Address;
 use clap::{arg, command, Arg, Command};
 
 use super::*;
 use crate::transaction::Transaction;
+use crate::wallets::Wallets;
 use std::process::exit;
 
 pub struct Cli {}
@@ -26,6 +28,11 @@ impl Cli {
                     .about("create a new blockchain and ")
                     .arg(arg!([address]).help("which address will get the genesis reward")),
             )
+            .subcommand(
+                Command::new("createwallet")
+                    .about("create a wallet with address, private key and public key"),
+            )
+            .subcommand(Command::new("listaddresses").about("list all address"))
             .subcommand(
                 Command::new("getbalance")
                     .about("get the address balance in the blockchain")
@@ -61,9 +68,9 @@ impl Cli {
             }
             Some(("getbalance", sub_matches)) => match sub_matches.get_one::<String>("address") {
                 Some(address) => {
-                    let address = String::from(&address[..]);
+                    let pub_key_hash = Address::decode(&address).unwrap().body;
                     let bc = Blockchain::new()?;
-                    let utxos = bc.find_UTXO(&address);
+                    let utxos = bc.find_UTXO(&pub_key_hash);
                     let mut balance = 0;
                     for utxo in utxos {
                         balance += utxo.value;
@@ -74,6 +81,20 @@ impl Cli {
                     return Err(format_err!("Need <address> argument"));
                 }
             },
+            Some(("createwallet", sub_matches)) => {
+                let mut ws = Wallets::new()?;
+                let address = ws.create_wallet();
+                ws.save_all()?;
+                println!("Create wallet success: address {}", address);
+            }
+            Some(("listaddresses", sub_matches)) => {
+                let ws = Wallets::new()?;
+                let addresses = ws.get_all_addresses();
+                println!("addresses: ");
+                for ad in addresses {
+                    println!("{}", ad);
+                }
+            }
             Some(("send", sub_matches)) => {
                 let from = if let Some(from_address) = sub_matches.get_one::<String>("from") {
                     from_address

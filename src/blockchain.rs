@@ -1,6 +1,7 @@
 #![allow(unused)]
 #![allow(non_snake_case)]
 
+use anyhow::format_err;
 use bincode::{deserialize, serialize};
 use sled;
 
@@ -26,7 +27,7 @@ pub struct BlockchainIterator<'a> {
 impl Blockchain {
     pub fn new() -> Result<Blockchain> {
         info!("open blockchain");
-        let db = sled::open("./db")?;
+        let db = sled::open("./db/bc")?;
         let hash = db
             .get("LAST")?
             .expect("Must create a new blockchain database first");
@@ -41,7 +42,7 @@ impl Blockchain {
     pub fn create_blockchain(address: String) -> Result<Blockchain> {
         info!("Create new blockchain");
 
-        let db = sled::open("./db")?;
+        let db = sled::open("./db/bc")?;
 
         debug!("Creating new block database");
 
@@ -67,6 +68,13 @@ impl Blockchain {
     pub fn mine_block(&mut self, transactions: Vec<Transaction>) -> Result<()> {
         info!("mine a new block");
 
+        // FIXME: Do not sign and verify transactions temporarily.We will realize it in next stage -- Transaction_Part2.
+        // for tx in &transactions {
+        //     if !self.verify_transaction(&tx)? {
+        //         return Err(format_err!("ERROR: Invalid transaction"));
+        //     }
+        // }
+
         let last_hash = self.db.get("LAST")?.expect("Could not get last hash ");
         let new_block = Block::new_block(transactions, String::from_utf8(last_hash.to_vec())?)?;
         self.db
@@ -79,7 +87,44 @@ impl Blockchain {
         Ok(())
     }
 
-    pub fn find_unspent_transactions(&self, address: &str) -> Vec<Transaction> {
+    fn get_prev_TXs(&self, tx: &Transaction) -> Result<HashMap<String, Transaction>> {
+        let mut prev_TXs: HashMap<String, Transaction> = HashMap::new();
+        for vin in &tx.vin {
+            let prev_tx = self.find_transaction(&vin.txid)?;
+            prev_TXs.insert(prev_tx.id.clone(), prev_tx);
+        }
+
+        Ok(prev_TXs)
+    }
+
+    pub fn sign_transaction(&self, tx: &mut Transaction, private_key: &[u8; 32]) -> Result<()> {
+        let prev_TXs = self.get_prev_TXs(tx)?;
+        tx.sign(private_key, prev_TXs)?;
+
+        Ok(())
+    }
+
+    pub fn verify_transaction(&self, tx: &Transaction) -> Result<bool> {
+        if tx.is_coinbase() {
+            return Ok(true);
+        }
+
+        let prev_TXs = self.get_prev_TXs(tx)?;
+        tx.verify(prev_TXs)
+    }
+
+    pub fn find_transaction(&self, id: &str) -> Result<Transaction> {
+        for block in self.iter() {
+            for tx in block.get_transaction() {
+                if tx.id == id {
+                    return Ok(tx.clone());
+                }
+            }
+        }
+        Err(format_err!("Transaction is not found"))
+    }
+
+    pub fn find_unspent_transactions(&self, pub_key_hash: &[u8]) -> Vec<Transaction> {
         let mut spent_TXOs: HashMap<String, Vec<i32>> = HashMap::new();
         let mut unspent_TXs: Vec<Transaction> = Vec::new();
 
@@ -92,14 +137,14 @@ impl Blockchain {
                         }
                     }
 
-                    if tx.vout[outId].can_be_unlock_with(address) {
+                    if tx.vout[outId].is_locked_with_key(pub_key_hash) {
                         unspent_TXs.push(tx.to_owned())
                     }
                 }
 
                 if !tx.is_coinbase() {
                     for input in &tx.vin {
-                        if input.can_unlock_output_with(address) {
+                        if input.use_key(pub_key_hash) {
                             match spent_TXOs.get_mut(&input.txid) {
                                 Some(v) => {
                                     v.push(input.vout);
@@ -113,16 +158,17 @@ impl Blockchain {
                 }
             }
         }
+
         unspent_TXs
     }
 
-    pub fn find_UTXO(&self, address: &str) -> Vec<TXOutput> {
+    pub fn find_UTXO(&self, pub_key_hash: &[u8]) -> Vec<TXOutput> {
         let mut unspent_output: Vec<TXOutput> = Vec::new();
-        let unspent_transaction = self.find_unspent_transactions(address);
+        let unspent_transaction = self.find_unspent_transactions(pub_key_hash);
 
         for tx in unspent_transaction {
             for vout in &tx.vout {
-                if vout.can_be_unlock_with(address) {
+                if vout.is_locked_with_key(pub_key_hash) {
                     unspent_output.push(vout.clone());
                 }
             }
@@ -133,16 +179,16 @@ impl Blockchain {
 
     pub fn find_spendable_outputs(
         &self,
-        address: &str,
+        pub_key_hash: &[u8],
         amount: i32,
     ) -> (i32, HashMap<String, Vec<i32>>) {
         let mut unspent_outputs: HashMap<String, Vec<i32>> = HashMap::new();
         let mut accumulated = 0;
-        let unspent_TXs = self.find_unspent_transactions(address);
+        let unspent_TXs = self.find_unspent_transactions(pub_key_hash);
 
         for tx in unspent_TXs {
             for index in 0..tx.vout.len() {
-                if tx.vout[index].can_be_unlock_with(address) && accumulated < amount {
+                if tx.vout[index].is_locked_with_key(pub_key_hash) && accumulated < amount {
                     match unspent_outputs.get_mut(&tx.id) {
                         Some(v) => v.push(index as i32),
                         None => {
