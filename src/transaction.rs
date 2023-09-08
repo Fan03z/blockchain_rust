@@ -136,7 +136,7 @@ impl Transaction {
                 .verify(
                     tx_copy.id.as_bytes(),
                     &Signature::from_bytes(<&[u8; 64]>::try_from(
-                        tx_copy.vin[in_id].signature.as_slice(),
+                        self.vin[in_id].signature.as_slice(),
                     )?),
                 )
                 .is_err()
@@ -221,11 +221,10 @@ impl Transaction {
         };
         tx.set_id()?;
 
-        // FIXME: Do not sign and verify transactions temporarily.We will realize it in next stage -- Transaction_Part2.
-        // bc.sign_transaction(
-        //     &mut tx,
-        //     <&[u8; 32]>::try_from(wallet.secret_key.as_slice())?,
-        // );
+        bc.sign_transaction(
+            &mut tx,
+            <&[u8; 32]>::try_from(wallet.secret_key.as_slice())?,
+        );
 
         Ok(tx)
     }

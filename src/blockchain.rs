@@ -68,12 +68,11 @@ impl Blockchain {
     pub fn mine_block(&mut self, transactions: Vec<Transaction>) -> Result<()> {
         info!("mine a new block");
 
-        // FIXME: Do not sign and verify transactions temporarily.We will realize it in next stage -- Transaction_Part2.
-        // for tx in &transactions {
-        //     if !self.verify_transaction(&tx)? {
-        //         return Err(format_err!("ERROR: Invalid transaction"));
-        //     }
-        // }
+        for tx in &transactions {
+            if !self.verify_transaction(&tx)? {
+                return Err(format_err!("ERROR: Invalid transaction"));
+            }
+        }
 
         let last_hash = self.db.get("LAST")?.expect("Could not get last hash ");
         let new_block = Block::new_block(transactions, String::from_utf8(last_hash.to_vec())?)?;

@@ -187,7 +187,6 @@ dependencies = [
  "bitcoincash-addr",
  "chrono",
  "clap",
- "ed25519",
  "ed25519-dalek",
  "env_logger",
  "log",
@@ -407,6 +406,7 @@ checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "rand_core",
  "serde",
  "sha2",
  "zeroize",

@@ -1,7 +1,7 @@
 use bincode::{deserialize, serialize};
 use bitcoincash_addr::{Address, HashType, Scheme};
-use ed25519::KeypairBytes;
-use rand::{thread_rng, RngCore};
+use ed25519_dalek::SigningKey;
+use rand::{rngs::OsRng, RngCore};
 use ripemd::{Digest, Ripemd160};
 use serde::{Deserialize, Serialize};
 use sha256;
@@ -18,11 +18,10 @@ pub struct Wallet {
 
 impl Wallet {
     fn new() -> Self {
-        let mut key: [u8; 64] = [0; 64];
-        thread_rng().fill_bytes(&mut key);
-        let ed25519_key = KeypairBytes::from_bytes(&key);
-        let secret_key = ed25519_key.secret_key.to_vec();
-        let public_key = ed25519_key.public_key.unwrap().to_bytes().to_vec();
+        let mut csprng = OsRng;
+        let ed25519_key = SigningKey::generate(&mut csprng);
+        let secret_key = ed25519_key.to_bytes().to_vec();
+        let public_key = ed25519_key.verifying_key().to_bytes().to_vec();
         Wallet {
             secret_key,
             public_key,
@@ -107,19 +106,5 @@ impl Wallets {
 
     pub fn get_wallet(&self, address: &str) -> Option<&Wallet> {
         self.wallets.get(address)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use ed25519::KeypairBytes;
-    use rand::{thread_rng, RngCore};
-    #[test]
-    fn test_private_key() {
-        let mut key: [u8; 64] = [0; 64];
-        thread_rng().fill_bytes(&mut key);
-        let ed25519_key = KeypairBytes::from_bytes(&key);
-        let secret_key = ed25519_key.secret_key;
-        println!("{:?}", secret_key);
     }
 }
