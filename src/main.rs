@@ -4,6 +4,7 @@ mod block;
 mod blockchain;
 mod cli;
 mod transaction;
+mod utxoset;
 mod wallets;
 
 extern crate env_logger;

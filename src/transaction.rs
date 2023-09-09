@@ -8,7 +8,10 @@ use serde::{Deserialize, Serialize};
 use sha256;
 
 use super::*;
-use crate::wallets::{hash_pub_key, Wallets};
+use crate::{
+    utxoset::UTXOSet,
+    wallets::{hash_pub_key, Wallets},
+};
 use std::collections::HashMap;
 
 const SUBSIDY: i32 = 10;
@@ -25,6 +28,11 @@ pub struct TXInput {
 pub struct TXOutput {
     pub value: i32,
     pub pub_key_hash: Vec<u8>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct TXOutputs {
+    pub outputs: Vec<TXOutput>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -175,7 +183,7 @@ impl Transaction {
         }
     }
 
-    pub fn new_UTXO(from: &str, to: &str, amount: i32, bc: &Blockchain) -> Result<Transaction> {
+    pub fn new_UTXO(from: &str, to: &str, amount: i32, utxo: &UTXOSet) -> Result<Transaction> {
         info!("new UTXO Transaction from: {} to: {}", from, to);
         let mut vin = Vec::new();
 
@@ -187,7 +195,7 @@ impl Transaction {
 
         let pub_key_hash = hash_pub_key(&wallet.public_key);
 
-        let acc_uo = bc.find_spendable_outputs(&pub_key_hash, amount);
+        let acc_uo = utxo.find_spendable_outputs(&pub_key_hash, amount)?;
 
         if acc_uo.0 < amount {
             error!("Not Enough balance");
@@ -221,7 +229,7 @@ impl Transaction {
         };
         tx.set_id()?;
 
-        bc.sign_transaction(
+        utxo.blockchain.sign_transaction(
             &mut tx,
             <&[u8; 32]>::try_from(wallet.secret_key.as_slice())?,
         );

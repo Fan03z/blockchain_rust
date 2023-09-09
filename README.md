@@ -23,7 +23,7 @@ cargo run listaddresses
 cargo run send "[from address]" "[to address]" "[amount]"
 ```
 
-New a block just has a transaction.Send transaction once,mine block once.
+Although new a block just has some transaction,it's just with a coinbase transaction and a send transaction.And still send transaction once,mine block once.
 
 > [Basic Prototype](https://github.com/Fan03z/blockchain_rust/tree/9b17796ba6efb48f30c1dcc8e8cbc6b5560aeaf3)
 >
@@ -33,6 +33,8 @@ New a block just has a transaction.Send transaction once,mine block once.
 >
 > [Transaction_Part1](https://github.com/Fan03z/blockchain_rust/tree/2a294b756e3fad0f7c865cb3c0b70f7e60a7104c)
 >
-> Addresses
+> [Addresses](https://github.com/Fan03z/blockchain_rust/tree/fd1e0ab94ddc0238ef4821d625e6cc3729c75f15)
+>
+> Transaction_Part2
 
 Reference: [blockchain_go](https://github.com/Jeiwan/blockchain_go) [blockchain-rust](https://github.com/yunwei37/blockchain-rust)

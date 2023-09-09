@@ -7,7 +7,7 @@ use sled;
 
 use super::*;
 use crate::block::Block;
-use crate::transaction::{TXOutput, Transaction};
+use crate::transaction::{TXOutput, TXOutputs, Transaction};
 use std::collections::HashMap;
 
 const GENESIS_COINBASE_DATA: &str =
@@ -32,7 +32,11 @@ impl Blockchain {
             .get("LAST")?
             .expect("Must create a new blockchain database first");
         info!("Found block database");
-        let last_hash = String::from_utf8(hash.to_vec())?;
+        let last_hash = if hash.is_empty() {
+            String::new()
+        } else {
+            String::from_utf8(hash.to_vec())?
+        };
         Ok(Blockchain {
             tip: last_hash.clone(),
             db: db,
@@ -65,7 +69,7 @@ impl Blockchain {
         }
     }
 
-    pub fn mine_block(&mut self, transactions: Vec<Transaction>) -> Result<()> {
+    pub fn mine_block(&mut self, transactions: Vec<Transaction>) -> Result<Block> {
         info!("mine a new block");
 
         for tx in &transactions {
@@ -83,7 +87,7 @@ impl Blockchain {
 
         self.tip = new_block.get_hash();
 
-        Ok(())
+        Ok(new_block)
     }
 
     fn get_prev_TXs(&self, tx: &Transaction) -> Result<HashMap<String, Transaction>> {
@@ -123,34 +127,40 @@ impl Blockchain {
         Err(format_err!("Transaction is not found"))
     }
 
-    pub fn find_unspent_transactions(&self, pub_key_hash: &[u8]) -> Vec<Transaction> {
-        let mut spent_TXOs: HashMap<String, Vec<i32>> = HashMap::new();
-        let mut unspent_TXs: Vec<Transaction> = Vec::new();
+    pub fn find_UTXO(&self) -> HashMap<String, TXOutputs> {
+        let mut utxos: HashMap<String, TXOutputs> = HashMap::new();
+        let mut spend_txos: HashMap<String, Vec<i32>> = HashMap::new();
 
         for block in self.iter() {
             for tx in block.get_transaction() {
-                for outId in 0..tx.vout.len() {
-                    if let Some(ids) = spent_TXOs.get(&tx.id) {
-                        if ids.contains(&(outId as i32)) {
+                for index in 0..tx.vout.len() {
+                    if let Some(ids) = spend_txos.get(&tx.id) {
+                        if ids.contains(&(index as i32)) {
                             continue;
                         }
                     }
 
-                    if tx.vout[outId].is_locked_with_key(pub_key_hash) {
-                        unspent_TXs.push(tx.to_owned())
+                    match utxos.get_mut(&tx.id) {
+                        Some(v) => v.outputs.push(tx.vout[index].clone()),
+                        None => {
+                            utxos.insert(
+                                tx.id.clone(),
+                                TXOutputs {
+                                    outputs: vec![tx.vout[index].clone()],
+                                },
+                            );
+                        }
                     }
                 }
 
                 if !tx.is_coinbase() {
-                    for input in &tx.vin {
-                        if input.use_key(pub_key_hash) {
-                            match spent_TXOs.get_mut(&input.txid) {
-                                Some(v) => {
-                                    v.push(input.vout);
-                                }
-                                None => {
-                                    spent_TXOs.insert(input.txid.clone(), vec![input.vout]);
-                                }
+                    for i in &tx.vin {
+                        match spend_txos.get_mut(&i.txid) {
+                            Some(v) => {
+                                v.push(i.vout);
+                            }
+                            None => {
+                                spend_txos.insert(i.txid.clone(), vec![i.vout]);
                             }
                         }
                     }
@@ -158,51 +168,7 @@ impl Blockchain {
             }
         }
 
-        unspent_TXs
-    }
-
-    pub fn find_UTXO(&self, pub_key_hash: &[u8]) -> Vec<TXOutput> {
-        let mut unspent_output: Vec<TXOutput> = Vec::new();
-        let unspent_transaction = self.find_unspent_transactions(pub_key_hash);
-
-        for tx in unspent_transaction {
-            for vout in &tx.vout {
-                if vout.is_locked_with_key(pub_key_hash) {
-                    unspent_output.push(vout.clone());
-                }
-            }
-        }
-
-        unspent_output
-    }
-
-    pub fn find_spendable_outputs(
-        &self,
-        pub_key_hash: &[u8],
-        amount: i32,
-    ) -> (i32, HashMap<String, Vec<i32>>) {
-        let mut unspent_outputs: HashMap<String, Vec<i32>> = HashMap::new();
-        let mut accumulated = 0;
-        let unspent_TXs = self.find_unspent_transactions(pub_key_hash);
-
-        for tx in unspent_TXs {
-            for index in 0..tx.vout.len() {
-                if tx.vout[index].is_locked_with_key(pub_key_hash) && accumulated < amount {
-                    match unspent_outputs.get_mut(&tx.id) {
-                        Some(v) => v.push(index as i32),
-                        None => {
-                            unspent_outputs.insert(tx.id.clone(), vec![index as i32]);
-                        }
-                    }
-                    accumulated += tx.vout[index].value;
-
-                    if accumulated >= amount {
-                        return (accumulated, unspent_outputs);
-                    }
-                }
-            }
-        }
-        (accumulated, unspent_outputs)
+        utxos
     }
 }
 

@@ -6,6 +6,7 @@ use clap::{arg, command, Arg, Command};
 
 use super::*;
 use crate::transaction::Transaction;
+use crate::utxoset::UTXOSet;
 use crate::wallets::Wallets;
 use std::process::exit;
 
@@ -58,7 +59,9 @@ impl Cli {
                 match sub_matches.get_one::<String>("address") {
                     Some(address) => {
                         let address = String::from(&address[..]);
-                        Blockchain::create_blockchain(address.clone())?;
+                        let bc = Blockchain::create_blockchain(address.clone())?;
+                        let utxo_set = UTXOSet { blockchain: bc };
+                        utxo_set.reindex()?;
                         println!("Create blockchain");
                     }
                     None => {
@@ -70,10 +73,12 @@ impl Cli {
                 Some(address) => {
                     let pub_key_hash = Address::decode(&address).unwrap().body;
                     let bc = Blockchain::new()?;
-                    let utxos = bc.find_UTXO(&pub_key_hash);
+                    let utxo_set = UTXOSet { blockchain: bc };
+                    let utxos = utxo_set.find_UTXO(&pub_key_hash)?;
+
                     let mut balance = 0;
-                    for utxo in utxos {
-                        balance += utxo.value;
+                    for out in utxos.outputs {
+                        balance += out.value;
                     }
                     println!("Balance of '{}': {}\n", address, balance);
                 }
@@ -116,8 +121,13 @@ impl Cli {
                 };
 
                 let mut bc = Blockchain::new()?;
-                let tx = Transaction::new_UTXO(from, to, amount, &bc)?;
-                bc.mine_block(vec![tx])?;
+                let mut utxo_set = UTXOSet { blockchain: bc };
+                let tx = Transaction::new_UTXO(from, to, amount, &utxo_set)?;
+                let cbtx = Transaction::new_coinbase(from.to_string(), String::from("reward"))?;
+
+                let new_block = utxo_set.blockchain.mine_block(vec![cbtx, tx])?;
+                utxo_set.update(&new_block)?;
+
                 println!("Send transaction success!");
             }
             _ => {
