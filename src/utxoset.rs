@@ -64,7 +64,7 @@ impl UTXOSet {
         Ok(utxos)
     }
 
-    pub fn count_transaction(&self) -> Result<i32> {
+    pub fn count_transactions(&self) -> Result<i32> {
         let mut counter = 0;
         let db = sled::open("data/utxos")?;
         for kv in db.iter() {

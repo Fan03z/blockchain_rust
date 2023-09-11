@@ -79,7 +79,11 @@ impl Blockchain {
         }
 
         let last_hash = self.db.get("LAST")?.expect("Could not get last hash ");
-        let new_block = Block::new_block(transactions, String::from_utf8(last_hash.to_vec())?)?;
+        let new_block = Block::new_block(
+            transactions,
+            String::from_utf8(last_hash.to_vec())?,
+            self.get_best_height()? + 1,
+        )?;
         self.db
             .insert(new_block.get_hash(), serialize(&new_block)?)?;
         self.db.insert("LAST", new_block.get_hash().as_bytes())?;
@@ -88,6 +92,22 @@ impl Blockchain {
         self.tip = new_block.get_hash();
 
         Ok(new_block)
+    }
+
+    pub fn add_block(&mut self, block: Block) -> Result<()> {
+        let data = serialize(&block)?;
+        if let Some(_) = self.db.get(block.get_hash())? {
+            return Ok(());
+        }
+        self.db.insert(block.get_hash(), data)?;
+
+        let last_height = self.get_best_height()?;
+        if block.get_height() > last_height {
+            self.db.insert("LAST", block.get_hash().as_bytes())?;
+            self.tip = block.get_hash();
+            self.db.flush()?;
+        }
+        Ok(())
     }
 
     fn get_prev_TXs(&self, tx: &Transaction) -> Result<HashMap<String, Transaction>> {
@@ -169,6 +189,33 @@ impl Blockchain {
         }
 
         utxos
+    }
+
+    // --------- getter ---------
+
+    pub fn get_best_height(&self) -> Result<i32> {
+        let last_hash = if let Some(h) = self.db.get("LAST")? {
+            h
+        } else {
+            return Ok(-1);
+        };
+        let last_data = self.db.get(last_hash)?.unwrap();
+        let last_block: Block = deserialize(&last_data.to_vec())?;
+        Ok(last_block.get_height())
+    }
+
+    pub fn get_block_hashs(&self) -> Vec<String> {
+        let mut list = Vec::new();
+        for b in self.iter() {
+            list.push(b.get_hash());
+        }
+        list
+    }
+
+    pub fn get_block(&self, block_hash: &str) -> Result<Block> {
+        let data = self.db.get(block_hash)?.unwrap();
+        let block = deserialize(&data.to_vec())?;
+        Ok(block)
     }
 }
 

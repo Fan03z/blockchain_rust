@@ -2,9 +2,10 @@
 
 use anyhow::format_err;
 use bitcoincash_addr::Address;
-use clap::{arg, command, Arg, Command};
+use clap::{arg, command, ArgAction, Command};
 
 use super::*;
+use crate::server::*;
 use crate::transaction::Transaction;
 use crate::utxoset::UTXOSet;
 use crate::wallets::Wallets;
@@ -24,6 +25,18 @@ impl Cli {
             .subcommand_required(true)
             .arg_required_else_help(true)
             .subcommand(Command::new("printchain").about("print all the chain blocks"))
+            .subcommand(Command::new("reindex").about("reindex unspent-transaction-output set"))
+            .subcommand(
+                Command::new("startnode")
+                    .about("start the node server")
+                    .arg(arg!([port]).help("the port server bind to locally")),
+            )
+            .subcommand(
+                Command::new("minernode")
+                    .about("start the miner node")
+                    .arg(arg!([port]).help("the port server bind to locally"))
+                    .arg(arg!([address]).help("the wallet address to accept mining reward")),
+            )
             .subcommand(
                 Command::new("createblockchain")
                     .about("create a new blockchain and ")
@@ -44,7 +57,14 @@ impl Cli {
                     .about("send in blockchain")
                     .arg(arg!([from]).help("Source wallet address"))
                     .arg(arg!([to]).help("Destination wallet address"))
-                    .arg(arg!([amount]).help("Amount to send")),
+                    .arg(arg!([amount]).help("Amount to send"))
+                    .arg(
+                        arg!([mine])
+                            .short('m')
+                            .long("mine")
+                            .action(ArgAction::SetFalse)
+                            .help("if mined immediately in the same node when sending transaction"),
+                    ),
             )
             .get_matches();
 
@@ -54,6 +74,42 @@ impl Cli {
                 for b in bc.iter() {
                     println!("{:#?}", b);
                 }
+            }
+            Some(("reindex", sub_matches)) => {
+                let bc = Blockchain::new()?;
+                let utxo_set = UTXOSet { blockchain: bc };
+                utxo_set.reindex()?;
+                let count = utxo_set.count_transactions()?;
+                println!("Done! There are {} transactions in the UTXO set.", count);
+            }
+            Some(("startnode", sub_matches)) => {
+                if let Some(port) = sub_matches.get_one::<String>("port") {
+                    println!("Start node...");
+                    let bc = Blockchain::new()?;
+                    let utxo_set = UTXOSet { blockchain: bc };
+                    let server = Server::new(port, "", utxo_set)?;
+                    server.start_server()?;
+                }
+            }
+            Some(("minernode", sub_matches)) => {
+                let port = if let Some(port) = sub_matches.get_one::<String>("port") {
+                    port
+                } else {
+                    println!("Start miner node need <port> <address> arguments");
+                    exit(1);
+                };
+                let address = if let Some(address) = sub_matches.get_one::<String>("address") {
+                    address
+                } else {
+                    println!("Start miner node need <port> <address> arguments");
+                    exit(1);
+                };
+
+                println!("Start miner node...");
+                let bc = Blockchain::new()?;
+                let utxo_set = UTXOSet { blockchain: bc };
+                let server = Server::new(port, address, utxo_set)?;
+                server.start_server()?;
             }
             Some(("createblockchain", sub_matches)) => {
                 match sub_matches.get_one::<String>("address") {
@@ -123,12 +179,16 @@ impl Cli {
                 let mut bc = Blockchain::new()?;
                 let mut utxo_set = UTXOSet { blockchain: bc };
                 let tx = Transaction::new_UTXO(from, to, amount, &utxo_set)?;
-                let cbtx = Transaction::new_coinbase(from.to_string(), String::from("reward"))?;
 
-                let new_block = utxo_set.blockchain.mine_block(vec![cbtx, tx])?;
-                utxo_set.update(&new_block)?;
-
-                println!("Send transaction success!");
+                if sub_matches.get_flag("mine") {
+                    let cbtx = Transaction::new_coinbase(from.to_string(), String::from("reward"))?;
+                    let new_block = utxo_set.blockchain.mine_block(vec![cbtx, tx])?;
+                    utxo_set.update(&new_block)?;
+                    println!("Send transaction and wait to add in next block!");
+                } else {
+                    Server::send_transaction(&tx, utxo_set)?;
+                    println!("Send transaction success and add in new mine block!");
+                }
             }
             _ => {
                 return Err(format_err!("Invalid Command"));

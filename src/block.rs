@@ -17,10 +17,15 @@ pub struct Block {
     prev_block_hash: String,
     hash: String,
     nonce: i32,
+    height: i32,
 }
 
 impl Block {
-    pub fn new_block(transactions: Vec<Transaction>, prev_block_hash: String) -> Result<Block> {
+    pub fn new_block(
+        transactions: Vec<Transaction>,
+        prev_block_hash: String,
+        height: i32,
+    ) -> Result<Block> {
         let timestamp = Utc::now().timestamp_millis() as u128;
         let mut block = Block {
             timestamp,
@@ -28,13 +33,14 @@ impl Block {
             prev_block_hash,
             hash: String::new(),
             nonce: 0,
+            height,
         };
         block.proof_of_work()?;
         Ok(block)
     }
 
     pub fn new_genesis_block(coinbase: Transaction) -> Block {
-        Block::new_block(vec![coinbase], String::new()).unwrap()
+        Block::new_block(vec![coinbase], String::new(), 0).unwrap()
     }
 
     pub fn proof_of_work(&mut self) -> Result<()> {
@@ -83,5 +89,9 @@ impl Block {
 
     pub fn get_transaction(&self) -> &Vec<Transaction> {
         &self.transactions
+    }
+
+    pub fn get_height(&self) -> i32 {
+        self.height
     }
 }
